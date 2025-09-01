@@ -1,19 +1,21 @@
-import google.generativeai as genai
+import os
+import time
+
+import requests
+import json
+import base64
 from PIL import Image
 import io
-import json
 
-# --- CONFIGURACIÓN ---
-# IMPORTANTE: Reemplaza "TU_API_KEY_AQUI" con tu clave de API de Google AI Studio.
-# Se recomienda usar variables de entorno para mayor seguridad.
-API_KEY = "TU_API_KEY_AQUI"
+# Carga la clave de API desde una variable de entorno o un archivo de configuración
+API_KEY = os.environ.get("GEMINI_API_KEY")
+if not API_KEY:
+    raise ValueError(
+        "No se encontró la clave de API de Gemini. Asegúrate de configurar la variable de entorno GEMINI_API_KEY.")
 
-# Configura el cliente de Gemini
-genai.configure(api_key=API_KEY)
+GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={API_KEY}"
 
-# Define el prompt que se enviará a Gemini junto con la imagen.
-# Este prompt instruye al modelo sobre cómo debe comportarse y qué formato de salida se espera.
-GEMINI_PROMPT = """
+PROMPT_TEXT = """
 Eres un asistente de clasificación de basura inteligente y amigable.
 Recibirás imágenes de objetos para decidir a qué categoría de residuos pertenece.
 Debes responder SIEMPRE en formato JSON válido siguiendo las siguientes reglas estrictas:
@@ -49,45 +51,64 @@ Ejemplo: "¡Genial! Detecté una botella de plástico. Recuerda que puedes recic
 """
 
 
-def classify_image(image_bytes):
-    """
-    Envía una imagen a la API de Gemini para su clasificación.
-
-    Args:
-        image_bytes (bytes): La imagen en formato de bytes.
-
-    Returns:
-        dict: Un diccionario con el resultado de la clasificación, o None si hay un error.
-    """
+def classify_image(image_bytes, retries=1):
     print("Enviando imagen a Gemini para clasificación...")
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
 
-    try:
-        # Cargar la imagen desde los bytes
-        img = Image.open(io.BytesIO(image_bytes))
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": PROMPT_TEXT},
+                    {
+                        "inline_data": {
+                            "mime_type": "image/jpeg",
+                            "data": base64_image
+                        }
+                    }
+                ]
+            }
+        ]
+    }
 
-        # Inicializar el modelo de Gemini Vision
-        model = genai.GenerativeModel('gemini-pro-vision')
+    headers = {"Content-Type": "application/json"}
 
-        # Enviar la imagen y el prompt al modelo
-        response = model.generate_content([GEMINI_PROMPT, img])
+    for attempt in range(retries + 1):
+        try:
+            # <<< LÍNEA MODIFICADA >>>
+            # Se ha añadido un timeout de 30 segundos. Si no hay respuesta, fallará.
+            response = requests.post(GEMINI_API_URL, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()  # Lanza un error si la respuesta es 4xx o 5xx
 
-        # Extraer y limpiar la respuesta JSON
-        # A veces, el modelo envuelve el JSON en ```json ... ```, así que lo limpiamos.
-        json_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+            response_json = response.json()
 
-        # Parsear la cadena de texto a un diccionario de Python
-        result = json.loads(json_text)
-        print(f"Respuesta de Gemini recibida: {result}")
+            # Extraer el contenido JSON del texto
+            json_str = response_json['candidates'][0]['content']['parts'][0]['text']
+            # Limpiar el string en caso de que venga con formato markdown
+            if json_str.startswith("```json"):
+                json_str = json_str.strip("```json\n").strip("`")
 
-        return result
+            return json.loads(json_str)
 
-    except json.JSONDecodeError:
-        print("Error: La respuesta de Gemini no es un JSON válido.")
-        print(f"Texto recibido: {response.text}")
-        return None
-    except Exception as e:
-        print(f"Error inesperado al contactar con la API de Gemini: {e}")
-        return None
+        except requests.exceptions.Timeout:
+            print(f"Error: La solicitud a Gemini superó el tiempo de espera de 30 segundos.")
+            if attempt < retries:
+                print("Reintentando...")
+            else:
+                return {"error": "Timeout", "message": "La API no respondió a tiempo."}
+
+        except requests.exceptions.RequestException as e:
+            print(f"Error inesperado al contactar con la API de Gemini: {e}")
+            if attempt < retries:
+                print(f"Intento {attempt + 1} de clasificación falló. Reintentando...")
+                time.sleep(2)  # Espera 2 segundos antes de reintentar
+            else:
+                return {"error": "API Connection Error", "message": str(e)}
+        except (KeyError, IndexError, json.JSONDecodeError) as e:
+            print(f"Error al procesar la respuesta de Gemini: {e}")
+            return {"error": "Invalid Response", "message": "La respuesta de la API no tuvo el formato esperado."}
+
+    return None
 
 
 # Ejemplo de uso (para pruebas)
@@ -104,4 +125,3 @@ if __name__ == '__main__':
                 print("------------------------------------")
     except FileNotFoundError:
         print("Para probar, crea un archivo 'test_image.jpg' en este directorio.")
-
