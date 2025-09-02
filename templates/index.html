@@ -4,152 +4,278 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Clasificación de Basura Inteligente</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* Estilos generales */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Contenedor principal */
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            background-color: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            text-align: center;
+            color: #1c1e21;
+            margin-bottom: 20px;
+        }
+
+        /* Layout principal (cámara e historial) */
+        .main-layout {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .camera-section, .history-section {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        /* Sección de la cámara */
+        .camera-box {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: #000;
+            position: relative;
+        }
+        .camera-box img {
+            width: 100%;
+            display: block;
+        }
+        .camera-controls {
+            padding: 15px;
+            text-align: center;
+        }
+
+        /* Botón de captura */
+        .capture-btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+        .capture-btn:hover {
+            background-color: #0056b3;
+        }
+        .capture-btn:active {
+            transform: scale(0.98);
+        }
+        .capture-btn.loading {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+
+        /* Sección del historial */
+        .history-section h2 {
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .history-table-wrapper {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+            position: sticky;
+            top: 0;
+        }
+        tbody tr:hover {
+            background-color: #f1f1f1;
+        }
+
+        /* Indicador de estado */
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+        }
+        .status-enviado { background-color: #28a745; }
+        .status-error_arduino { background-color: #dc3545; }
+        .status-pendiente { background-color: #ffc107; color: #333; }
+        .status-no_requerido { background-color: #6c757d; }
+
+        /* Mensajes y notificaciones */
+        .message-area {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            min-height: 20px;
+            font-weight: bold;
+        }
+        .message-success { background-color: #e9f7ef; color: #28a745; }
+        .message-error { background-color: #fdecea; color: #dc3545; }
+
+    </style>
 </head>
 <body>
 
     <div class="container">
-        <h1>♻️ Cámara en Vivo</h1>
-        <div class="video-container">
-            <img src="{{ url_for('video_feed') }}" alt="Video en vivo de la cámara">
+        <h1>🤖 Sistema de Clasificación de Basura Inteligente</h1>
+
+        <div class="main-layout">
+            <!-- Sección de la Cámara -->
+            <div class="camera-section">
+                <h2>Cámara en Vivo</h2>
+                <div class="camera-box">
+                    <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Video en vivo">
+                </div>
+                <div class="camera-controls">
+                    <button id="capture-btn" class="capture-btn">Clasificar Objeto</button>
+                    <div id="message-area" class="message-area"></div>
+                </div>
+            </div>
+
+            <!-- Sección del Historial -->
+            <div class="history-section">
+                <h2>Historial de Clasificación</h2>
+                <div class="history-table-wrapper">
+                    <table id="history-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Fecha</th>
+                                <th>Material</th>
+                                <th>Objeto Detectado</th>
+                                <th>Estado Arduino</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Las filas se llenarán con JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="container">
-        <h2>Historial de Clasificación</h2>
-        <ul id="history-list">
-        </ul>
-    </div>
-
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function() {
+            const captureBtn = document.getElementById('capture-btn');
+            const messageArea = document.getElementById('message-area');
+            const historyTableBody = document.querySelector('#history-table tbody');
 
-        const historyList = document.getElementById('history-list');
-        let lastKnownId = 0;
-        let isInitialLoad = true; // Flag para controlar la carga inicial
+            // --- Lógica de Captura y Clasificación ---
+            captureBtn.addEventListener('click', async () => {
+                if (captureBtn.classList.contains('loading')) return;
 
-        /**
-         * Reproduce un texto usando la API de Síntesis de Voz del navegador.
-         */
-        function speak(text) {
-            if (!('speechSynthesis' in window)) {
-                console.warn("La API de Speech Synthesis no es compatible con este navegador.");
-                return;
+                setLoading(true, 'Clasificando, por favor espera...');
+
+                try {
+                    const response = await fetch('/capture', { method: 'POST' });
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        const material = result.classification.material || 'N/A';
+                        showMessage(`¡Clasificado! Material: ${material.toUpperCase()}`, 'success');
+
+                        // Leer la respuesta en voz alta
+                        speak(result.classification.respuesta_hablada);
+                    } else {
+                        throw new Error(result.error || 'Ocurrió un error desconocido.');
+                    }
+                } catch (error) {
+                    showMessage(`Error: ${error.message}`, 'error');
+                } finally {
+                    setLoading(false);
+                    // Actualizar el historial después de cada captura
+                    updateHistory();
+                }
+            });
+
+            // --- Funciones Auxiliares ---
+            function setLoading(isLoading, text = 'Clasificar Objeto') {
+                captureBtn.disabled = isLoading;
+                captureBtn.textContent = text;
+                if (isLoading) {
+                    captureBtn.classList.add('loading');
+                } else {
+                    captureBtn.classList.remove('loading');
+                }
             }
-            // Cancelar cualquier locución anterior para dar prioridad a la nueva
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'es-ES';
-            utterance.rate = 1.1;
-            window.speechSynthesis.speak(utterance);
-        }
 
-        function createHistoryElement(record) {
-            const item = document.createElement('li');
-            item.className = 'history-item';
-            item.id = `record-${record.id}`;
+            function showMessage(message, type) {
+                messageArea.textContent = message;
+                messageArea.className = `message-area message-${type}`;
+            }
 
-            const material = record.material || 'desconocido';
-            const iconChar = material.charAt(0).toUpperCase();
-
-            const date = new Date(record.fecha);
-            const formattedTime = date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-
-            item.innerHTML = `
-                <div class="material-icon material-${material.toLowerCase()}">${iconChar}</div>
-                <div class="info">
-                    <strong>${material.replace('_', ' ')}</strong>
-                    <span>- ${record.respuesta_hablada}</span>
-                </div>
-                <div class="timestamp">${formattedTime}</div>
-            `;
-            return item;
-        }
-
-        /**
-         * Busca nuevos registros en el historial y actualiza la interfaz.
-         */
-        async function fetchAndUpdateHistory() {
-            try {
-                const response = await fetch('/history');
-                if (!response.ok) {
-                    console.error("Error al obtener el historial.");
-                    return;
+            function speak(text) {
+                if ('speechSynthesis' in window) {
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = 'es-ES'; // Configurar el idioma
+                    window.speechSynthesis.speak(utterance);
+                } else {
+                    console.warn('La API de Speech Synthesis no es compatible con este navegador.');
                 }
-                const records = await response.json();
+            }
 
-                if (records.length === 0) {
-                    return;
-                }
+            // --- Lógica de Actualización del Historial ---
+            async function updateHistory() {
+                try {
+                    const response = await fetch('/history');
+                    const records = await response.json();
 
-                // En la carga inicial, establecer el ID más reciente para no reproducir el audio antiguo.
-                if (isInitialLoad) {
-                    lastKnownId = records[0].id;
-                    isInitialLoad = false;
-                    // Cargar toda la historia sin reproducir audio
-                    historyList.innerHTML = '';
+                    historyTableBody.innerHTML = ''; // Limpiar la tabla
+
                     records.forEach(record => {
-                        const element = createHistoryElement(record);
-                        historyList.appendChild(element);
+                        const objetos = JSON.parse(record.objetos_detectados || '[]');
+                        const primerObjeto = objetos.length > 0 ? objetos[0].nombre : 'N/A';
+
+                        const row = `
+                            <tr>
+                                <td>${record.id}</td>
+                                <td>${record.fecha}</td>
+                                <td>${record.material || 'Nulo'}</td>
+                                <td>${primerObjeto}</td>
+                                <td><span class="status-badge status-${(record.estado_envio || '').toLowerCase()}">${record.estado_envio}</span></td>
+                            </tr>
+                        `;
+                        historyTableBody.innerHTML += row;
                     });
-                    return; // Salir en la primera carga
+
+                } catch (error) {
+                    console.error('Error al actualizar el historial:', error);
                 }
-
-                const latestRecord = records[0];
-                if (latestRecord.id > lastKnownId) {
-                    console.log(`Nuevo registro detectado: ID ${latestRecord.id}`);
-                    lastKnownId = latestRecord.id;
-
-                    // Añadir solo el nuevo elemento al principio de la lista
-                    const newElement = createHistoryElement(latestRecord);
-                    historyList.insertBefore(newElement, historyList.firstChild);
-
-                    // Limitar el historial a, por ejemplo, 20 elementos
-                    while (historyList.children.length > 20) {
-                        historyList.removeChild(historyList.lastChild);
-                    }
-
-                    // Aplicar animación al nuevo elemento
-                    newElement.classList.add('new-record');
-                    setTimeout(() => {
-                        newElement.classList.remove('new-record');
-                    }, 1500);
-                }
-            } catch (error) {
-                console.error('Error en el proceso de actualización del historial:', error);
             }
-        }
 
-        /**
-         * Busca nuevos mensajes de voz del backend y los reproduce.
-         */
-        async function fetchAndSpeakMessages() {
-            try {
-                const response = await fetch('/get_messages');
-                if (!response.ok) {
-                    console.error("Error al obtener mensajes de voz.");
-                    return;
-                }
-                const messages = await response.json();
-
-                // Reproducir cada mensaje en orden
-                messages.forEach(text => {
-                    if (text) {
-                        console.log("Reproduciendo mensaje:", text);
-                        speak(text);
-                    }
-                });
-            } catch (error) {
-                console.error('Error al obtener mensajes de voz:', error);
-            }
-        }
-
-        // --- Ciclos de Actualización ---
-        fetchAndUpdateHistory(); // Carga inicial
-        setInterval(fetchAndUpdateHistory, 2000); // Actualiza el historial
-        setInterval(fetchAndSpeakMessages, 1500); // Busca nuevos mensajes de voz
-
-    });
+            // Cargar el historial inicial y actualizarlo periódicamente
+            updateHistory();
+            setInterval(updateHistory, 10000); // Actualiza cada 10 segundos
+        });
     </script>
 
 </body>

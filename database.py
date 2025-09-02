@@ -1,14 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Módulo de Base de Datos (database.py)
-
-Este módulo se encarga de toda la interacción con la base de datos SQLite.
-Proporciona funciones para inicializar la base de datos, crear la tabla de
-historial, añadir nuevos registros de clasificación y obtener el historial
-para mostrarlo en la interfaz web.
-
-La base de datos se almacena en un archivo local llamado 'historial.db'.
-"""
 import sqlite3
 import json
 from datetime import datetime
@@ -17,25 +6,15 @@ from datetime import datetime
 DATABASE_NAME = 'historial.db'
 
 
-def _column_exists(cursor, table_name, column_name):
-    """Verifica si una columna ya existe en una tabla."""
-    cursor.execute(f"PRAGMA table_info({table_name})")
-    columns = [info[1] for info in cursor.fetchall()]
-    return column_name in columns
-
-
 def init_db():
     """
-    Inicializa la base de datos.
-
-    - Crea la tabla 'historial' si no existe.
-    - Añade la columna 'respuesta_hablada' si no existe, para no perder datos.
+    Inicializa la base de datos y crea la tabla 'historial' si no existe.
     """
     try:
         conn = sqlite3.connect(DATABASE_NAME)
         cursor = conn.cursor()
 
-        # Crear la tabla principal si no existe
+        # Crear la tabla si no existe
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS historial (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,14 +26,8 @@ def init_db():
             )
         ''')
 
-        # --- MODIFICACIÓN: Añadir nueva columna sin borrar la tabla ---
-        # Se comprueba si la columna ya existe para evitar errores en ejecuciones futuras.
-        if not _column_exists(cursor, 'historial', 'respuesta_hablada'):
-            print("Añadiendo columna 'respuesta_hablada' a la base de datos...")
-            cursor.execute('ALTER TABLE historial ADD COLUMN respuesta_hablada TEXT')
-
         conn.commit()
-        print("Base de datos inicializada y verificada correctamente.")
+        print("Base de datos inicializada correctamente.")
     except sqlite3.Error as e:
         print(f"Error al inicializar la base de datos: {e}")
     finally:
@@ -62,19 +35,18 @@ def init_db():
             conn.close()
 
 
-def add_record(material, objetos, confianza, estado_envio, respuesta_hablada=""):
+def add_record(material, objetos, confianza, estado_envio):
     """
-    Añade un nuevo registro de clasificación a la tabla 'historial'.
+    Añade un nuevo registro a la tabla 'historial'.
 
     Args:
         material (str): El material clasificado ('plástico', 'orgánico', 'metal', 'null').
         objetos (list): Una lista de diccionarios con los objetos detectados.
-        confianza (float): El nivel de confianza del objeto principal (0.0 a 1.0).
-        estado_envio (str): El estado del envío al Arduino ('PENDIENTE', 'ENVIADO', 'ERROR_ARDUINO', etc.).
-        respuesta_hablada (str): El texto que el asistente debe decir.
+        confianza (float): El nivel de confianza del objeto principal.
+        estado_envio (str): El estado del envío al Arduino ('PENDIENTE', 'ENVIADO', 'ERROR').
 
     Returns:
-        int: El ID del registro recién insertado, o None si ocurrió un error.
+        int: El ID del registro insertado, o None si hubo un error.
     """
     try:
         conn = sqlite3.connect(DATABASE_NAME)
@@ -82,17 +54,17 @@ def add_record(material, objetos, confianza, estado_envio, respuesta_hablada="")
 
         fecha_actual = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        # Convertimos la lista de objetos a una cadena JSON para poder almacenarla.
+        # Convertimos la lista de objetos a una cadena JSON para almacenarla
         objetos_json = json.dumps(objetos)
 
         cursor.execute('''
-            INSERT INTO historial (fecha, material, objetos_detectados, confianza, estado_envio, respuesta_hablada)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (fecha_actual, material, objetos_json, confianza, estado_envio, respuesta_hablada))
+            INSERT INTO historial (fecha, material, objetos_detectados, confianza, estado_envio)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (fecha_actual, material, objetos_json, confianza, estado_envio))
 
         conn.commit()
         last_id = cursor.lastrowid
-        print(f"Registro añadido a la base de datos con ID: {last_id}")
+        print(f"Registro añadido con ID: {last_id}")
         return last_id
     except sqlite3.Error as e:
         print(f"Error al añadir registro a la base de datos: {e}")
@@ -104,13 +76,11 @@ def add_record(material, objetos, confianza, estado_envio, respuesta_hablada="")
 
 def update_record_status(record_id, nuevo_estado):
     """
-    Actualiza únicamente el estado de envío de un registro específico.
-
-    Se usa para marcar si el comando se envió correctamente al Arduino o si falló.
+    Actualiza el estado de envío de un registro específico.
 
     Args:
-        record_id (int): El ID del registro que se va a actualizar.
-        nuevo_estado (str): El nuevo estado ('ENVIADO', 'ERROR_ARDUINO', etc.).
+        record_id (int): El ID del registro a actualizar.
+        nuevo_estado (str): El nuevo estado ('ENVIADO', 'ERROR').
     """
     try:
         conn = sqlite3.connect(DATABASE_NAME)
@@ -123,7 +93,7 @@ def update_record_status(record_id, nuevo_estado):
         ''', (nuevo_estado, record_id))
 
         conn.commit()
-        print(f"Estado del registro {record_id} actualizado a '{nuevo_estado}'.")
+        print(f"Estado del registro {record_id} actualizado a {nuevo_estado}.")
     except sqlite3.Error as e:
         print(f"Error al actualizar el estado del registro: {e}")
     finally:
@@ -133,25 +103,24 @@ def update_record_status(record_id, nuevo_estado):
 
 def get_history(limit=20):
     """
-    Obtiene los últimos registros del historial para mostrarlos en la web.
+    Obtiene los últimos registros del historial.
 
     Args:
-        limit (int): El número máximo de registros a devolver (por defecto, 20).
+        limit (int): El número máximo de registros a obtener.
 
     Returns:
-        list: Una lista de diccionarios, donde cada diccionario es un registro.
-              La lista está ordenada del más reciente al más antiguo.
+        list: Una lista de diccionarios, donde cada diccionario representa un registro.
     """
     try:
         conn = sqlite3.connect(DATABASE_NAME)
-        # Devolver filas como diccionarios para que sea más fácil usarlas con JSON
+        # Devolver filas como diccionarios para facilitar su uso en Flask
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
         cursor.execute('SELECT * FROM historial ORDER BY id DESC LIMIT ?', (limit,))
 
         rows = cursor.fetchall()
-        # Convertir las filas de tipo sqlite3.Row a diccionarios estándar de Python
+        # Convertir las filas a una lista de diccionarios estándar
         return [dict(row) for row in rows]
     except sqlite3.Error as e:
         print(f"Error al obtener el historial: {e}")
@@ -161,9 +130,6 @@ def get_history(limit=20):
             conn.close()
 
 
-# --- Bloque de Ejecución Principal ---
-# Si ejecutas este archivo directamente (python database.py),
-# se llamará a la función init_db() para preparar la base de datos.
+# Para ejecutar la inicialización directamente desde la terminal
 if __name__ == '__main__':
-    print("Ejecutando inicialización manual de la base de datos...")
     init_db()
