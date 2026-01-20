@@ -31,6 +31,10 @@ basura_inteligente/
 ### 1. Clonar o descargar el proyecto
 Copia todos los archivos en una carpeta llamada `basura_inteligente`.
 
+```bash
+git clone https://github.com/cexartattoo/ClasificacionBasuraGamini.git basura_inteligente
+```
+
 ### 2. Crear un entorno virtual (recomendado)
 ```bash
 python -m venv venv
