@@ -2,6 +2,35 @@
 
 Este proyecto implementa un sistema de clasificación de residuos utilizando una **cámara**, un **servidor Flask**, la **API de Gemini** para el reconocimiento de imágenes y un **Arduino** para el control físico de los contenedores.
 
+
+## ⚙️ Flujo de Trabajo
+
+1. La interfaz web muestra el video en vivo de la cámara.
+2. Al presionar **"Clasificar Objeto"**, se captura un fotograma.
+3. La imagen se envía a la **API de Gemini** para su clasificación.
+4. Gemini responde con un **JSON** que incluye:
+   - Tipo de material
+   - Objetos detectados
+   - Respuesta hablada
+5. El resultado se guarda en la base de datos `historial.db`.
+6. El material se envía al **Arduino** mediante puerto serial.
+7. El Arduino responde con `"OK"`.
+8. La interfaz web se actualiza y reproduce la respuesta hablada.
+
+---
+
+## 🛠️ Tecnologías Utilizadas
+
+- **Python** - Backend y lógica principal
+- **Flask** - Servidor web
+- **OpenCV** - Procesamiento de cámara
+- **Gemini API** - Reconocimiento de imágenes con IA
+- **Arduino** - Control de hardware
+- **SQLite** - Base de datos local
+
+---
+
+
 ---
 
 ## 📂 Estructura del Proyecto
@@ -69,33 +98,6 @@ python app.py
 Abre tu navegador en [http://127.0.0.1:5000](http://127.0.0.1:5000)
 
 Allí verás la transmisión en vivo de la cámara y el historial de clasificación.
-
----
-
-## ⚙️ Flujo de Trabajo
-
-1. La interfaz web muestra el video en vivo de la cámara.
-2. Al presionar **"Clasificar Objeto"**, se captura un fotograma.
-3. La imagen se envía a la **API de Gemini** para su clasificación.
-4. Gemini responde con un **JSON** que incluye:
-   - Tipo de material
-   - Objetos detectados
-   - Respuesta hablada
-5. El resultado se guarda en la base de datos `historial.db`.
-6. El material se envía al **Arduino** mediante puerto serial.
-7. El Arduino responde con `"OK"`.
-8. La interfaz web se actualiza y reproduce la respuesta hablada.
-
----
-
-## 🛠️ Tecnologías Utilizadas
-
-- **Python** - Backend y lógica principal
-- **Flask** - Servidor web
-- **OpenCV** - Procesamiento de cámara
-- **Gemini API** - Reconocimiento de imágenes con IA
-- **Arduino** - Control de hardware
-- **SQLite** - Base de datos local
 
 ---
 
