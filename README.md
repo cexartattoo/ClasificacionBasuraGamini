@@ -109,10 +109,12 @@ Allí verás la transmisión en vivo de la cámara y el historial de clasificaci
 
 ## 📄 Licencia
 
-[Añade tu licencia aquí - MIT, GPL, etc.]
+Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para más detalles.
 
 ---
 
 ## 👨‍💻 Autor
 
-[Tu nombre y enlaces a redes sociales]
+César Ramírez H.
+@cexartatto (Ig)
+Cez Art (Fb)
